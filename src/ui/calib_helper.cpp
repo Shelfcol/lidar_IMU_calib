@@ -51,7 +51,7 @@ CalibrHelper::CalibrHelper(ros::NodeHandle& nh)
   nh.param<double>("time_offset_padding", time_offset_padding, 0.015);
   nh.param<double>("knot_distance", knot_distance, 0.02);
 
-  if (!createCacheFolder(bag_path_)) {
+  if (!createCacheFolder(bag_path_)) { // 构建文件夹存放标定结果
     calib_step_ = Error;
   }
 
@@ -68,9 +68,9 @@ CalibrHelper::CalibrHelper(ros::NodeHandle& nh)
     /// read dataset
     std::cout << "\nLoad dataset from " << bag_path_ << std::endl;
     IO::LioDataset lio_dataset_temp(lidar_model_type);
-    lio_dataset_temp.read(bag_path_, topic_imu_, topic_lidar, bag_start, bag_durr);
+    lio_dataset_temp.read(bag_path_, topic_imu_, topic_lidar, bag_start, bag_durr); // 读取给定时间段内的scan，imu数据
     dataset_reader_ = lio_dataset_temp.get_data();
-    dataset_reader_->adjustDataset();
+    dataset_reader_->adjustDataset(); // 获取起止时间戳
   }
 
   map_time_ = dataset_reader_->get_start_time();
@@ -101,26 +101,42 @@ bool CalibrHelper::createCacheFolder(const std::string& bag_path) {
   return true;
 }
 
+// 对齐LiDAR和IMU的旋转序列来初始化旋转外参。
+// 通过IMU传感器的角速度测量w来进行B样条拟合旋转曲线q(t)，其中的每个控制点q通过最小二乘求解。
+// 其中初始控制点为单位四元数q0。
+// 这里使用原始IMU数据拟合旋转B样条曲线，而不是IMU积分获得相对位姿，因为IMU数据受噪声和零偏影响
+// 优化方程 q0,..,qN =argmin sum(w(tk)-R^T(tk)*dR(tk)), tk对应了一个测量数据。
+// 即将拟合的旋转曲线R(t)求导得到任意时刻的角速度，然后转到IMU坐标系下，与当前测量的角速度作差。
+
 void CalibrHelper::Initialization() {
   if (Start != calib_step_) {
-    ROS_WARN("[Initialization] Need status: Start.");
+    ROS_WARN("[份额你解] Need status: Start.");
     return;
   }
+  std::cout<<"start initialization"<<std::endl;
+
+  // 将IMU数据喂给traj，保存到imu_data_
   for (const auto& imu_data: dataset_reader_->get_imu_data()) {
     traj_manager_->feedIMUData(imu_data);
   }
+  // 使用Gyro初始化SO(3)轨迹，轨迹起始点为单位四元数
   traj_manager_->initialSO3TrajWithGyro();
 
+  // 遍历每帧激光雷达
   for(const TPointCloud& raw_scan: dataset_reader_->get_scan_data()) {
     VPointCloud::Ptr cloud(new VPointCloud);
     TPointCloud2VPointCloud(raw_scan.makeShared(), cloud);
     double scan_timestamp = pcl_conversions::fromPCL(raw_scan.header.stamp).toSec();
 
     lidar_odom_->feedScan(scan_timestamp, cloud);
-
+    // 30帧数据以后每10帧点云做一次初始化 30,40,50,直到初始化成功，或者scan数据用完
     if (lidar_odom_->get_odom_data().size() < 30
         || (lidar_odom_->get_odom_data().size() % 10 != 0))
       continue;
+    // 使用初始化旋转
+    static int rotation_initial_time =0;
+    rotation_initial_time++;
+    std::cout<<"initialize rotation times :"<<rotation_initial_time<<"  lidar odom size ="<<lidar_odom_->get_odom_data().size()<<std::endl;
     if (rotation_initializer_->EstimateRotation(traj_manager_,
                                                 lidar_odom_->get_odom_data())) {
       Eigen::Quaterniond qItoLidar = rotation_initializer_->getQ_ItoS();
@@ -144,11 +160,12 @@ void CalibrHelper::DataAssociation() {
 
   /// set surfel pap
   if (InitializationDone == calib_step_ ) {
-    Mapping();
-    scan_undistortion_->undistortScanInMap(lidar_odom_->get_odom_data());
+    Mapping();  // 点云去畸变，然后估计里程计
+    scan_undistortion_->undistortScanInMap(lidar_odom_->get_odom_data()); // 去畸变后的点云生成地图
 
-    surfel_association_->setSurfelMap(lidar_odom_->getNDTPtr(), map_time_);
-  } else if (BatchOptimizationDone == calib_step_ || RefineDone == calib_step_) {
+    surfel_association_->setSurfelMap(lidar_odom_->getNDTPtr(), map_time_); // 给每个cell拟合平面，给内点不同颜色
+  } 
+  else if (BatchOptimizationDone == calib_step_ || RefineDone == calib_step_) {
     scan_undistortion_->undistortScanInMap();
 
     plane_lambda_ = 0.7;
@@ -221,14 +238,15 @@ void CalibrHelper::Refinement() {
   std::cout<<GREEN<<"[Refinement] "<<timer.toc()<<" ms"<<RESET<<std::endl;
 }
 
+// 点云利用LiDAR轨迹去点云畸变，点云配准的初始预测矩阵由对应的IMU的相对旋转和标定外参获得//?为什么要用IMU相对旋转
 void CalibrHelper::Mapping(bool relocalization) {
   bool update_map = true;
   if (relocalization) {
     lidar_odom_->clearOdomData();
     update_map = false;
   } else {
-    scan_undistortion_->undistortScan();
-    lidar_odom_ = std::make_shared<LiDAROdometry>(ndt_resolution_);
+    scan_undistortion_->undistortScan(); // 点云其畸变，保存到scan_data_
+    lidar_odom_ = std::make_shared<LiDAROdometry>(ndt_resolution_); // 重新定义一个里程计
   }
 
   double last_scan_t = 0;
@@ -236,15 +254,15 @@ void CalibrHelper::Mapping(bool relocalization) {
     double scan_t = pcl_conversions::fromPCL(scan_raw.header.stamp).toSec();
     if (scan_t > scan4map_time_)
       update_map = false;
-    auto iter = scan_undistortion_->get_scan_data().find(scan_raw.header.stamp);
+    auto iter = scan_undistortion_->get_scan_data().find(scan_raw.header.stamp); // 找出当前帧对应的去畸变后的激光雷达数据
     if (iter != scan_undistortion_->get_scan_data().end()) {
       Eigen::Matrix4d pose_predict = Eigen::Matrix4d::Identity();
       Eigen::Quaterniond q_L2toL1 = Eigen::Quaterniond::Identity();
       if (last_scan_t > 0 &&
-          traj_manager_->evaluateLidarRelativeRotation(last_scan_t, scan_t, q_L2toL1)) {
-        pose_predict.block<3,3>(0,0) = q_L2toL1.toRotationMatrix();
+        traj_manager_->evaluateLidarRelativeRotation(last_scan_t, scan_t, q_L2toL1)) {//由IMU相对旋转和标定外参，获取两个时刻LiDAR的相对旋转
+        pose_predict.block<3,3>(0,0) = q_L2toL1.toRotationMatrix(); // 第一帧为单位矩阵
       }
-      lidar_odom_->feedScan(scan_t, iter->second, pose_predict, update_map);
+      lidar_odom_->feedScan(scan_t, iter->second, pose_predict, update_map); // 利用去畸变的点云估计里程计
       last_scan_t = scan_t;
     }
   }

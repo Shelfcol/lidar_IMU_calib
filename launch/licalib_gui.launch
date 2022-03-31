@@ -1,15 +1,15 @@
 <?xml version="1.0"?>
 <launch>
-    <arg name="topic_imu"           default="/imu1/raw/data_withSync" />
-    <arg name="path_bag"            default="/home/$(env USER)/rosbag/VLP_16/Garage-01.bag" />
+    <arg name="topic_imu"           default="/imu1/data" />
+    <arg name="path_bag"            default="/home/gxf/multi-sensor-fusion/calib_ws/data/Garage-01.bag" />
     <arg name="bag_start"           default="1" />
     <arg name="bag_durr"            default="30" />
-    <arg name="scan4map"            default="15" />
+    <arg name="scan4map"            default="15" /> <!--the duration for NDT mapping-->
     <arg name="lidar_model"         default="VLP_16" />
     <arg name="ndtResolution"       default="0.5" /> <!-- 0.5 for indoor case and 1.0 for outdoor case -->
 
     <arg name="time_offset_padding" default="0.015" />
-    <arg name="show_ui"    default="false" />
+    <arg name="show_ui"    default="true" />
 
     <node pkg="li_calib" type="li_calib_gui" name="li_calib_gui" output="screen">
     <!-- <node pkg="li_calib" type="li_calib_gui" name="li_calib_gui" output="screen" clear_params="true" launch-prefix="gdb -ex run &#45;&#45;args">-->

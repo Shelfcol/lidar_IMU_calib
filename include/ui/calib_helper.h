@@ -83,13 +83,13 @@ protected:
   bool opt_time_offset_;
 
   /// lidar odometry
-  double map_time_;
+  double map_time_; // 建图的起始时间
   double ndt_resolution_;
-  double scan4map_time_;
+  double scan4map_time_; // 建图的终止时间
 
   /// data association
-  double associated_radius_;
-  double plane_lambda_;
+  double associated_radius_; // 数据关联半径0.05
+  double plane_lambda_; // 判断是否为平面的参数，第一帧为0.6，后面为0.7
 
   std::shared_ptr<IO::LioDataset> dataset_reader_;
   InertialInitializer::Ptr rotation_initializer_;

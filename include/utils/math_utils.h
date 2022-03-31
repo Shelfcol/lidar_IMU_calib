@@ -164,6 +164,7 @@ inline Eigen::Matrix<typename Derived::Scalar, 4, 4> RightQuatMatrix(const Eigen
   return m;
 }
 
+// 四元数虚部在前，实部在后，于Quaternion kinematics 的顺序不一样
 template<typename T>
 inline Eigen::Matrix<T, 4, 4> LeftQuatMatrix(const Eigen::Matrix<T, 4, 1> &q) {
   Eigen::Matrix<T, 4, 4> m;

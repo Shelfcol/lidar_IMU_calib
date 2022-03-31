@@ -22,7 +22,6 @@
 #include <utils/math_utils.h>
 #include <utils/eigen_utils.hpp>
 #include <utils/ceres_callbacks.h>
-
 #include <memory>
 
 namespace licalib {
@@ -39,22 +38,23 @@ void TrajectoryManager::feedIMUData(const IO::IMUData& data) {
   imu_data_.emplace_back(data);
 }
 
+// 利用IMU原始的角速度测量值优化求解旋转轨迹
 void TrajectoryManager::initialSO3TrajWithGyro() {
   assert(imu_data_.size() > 0 &&
          "[initialSO3TrajWithGyro]: There's NO imu data for initialization.");
   std::shared_ptr<SO3TrajEstimator> estimator_SO3;
   estimator_SO3 = std::make_shared<SO3TrajEstimator>(traj_->SO3Spline());
-
+  // 将gyro数据加入estimator_SO3
   addGyroscopeMeasurements(estimator_SO3);
 
   /// fix the initial pose of trajectory
   double weight_t0 = calib_param_manager->global_opt_gyro_weight;
   double t0 = traj_->SO3Spline()->MinTime();
   //Eigen::Quaterniond q0 = Eigen::Quaterniond::Identity();
-  Eigen::AngleAxisd rotation_vector(0.0001, Eigen::Vector3d(0,0,1));
+  Eigen::AngleAxisd rotation_vector(0.0001, Eigen::Vector3d(0,0,1)); //为什么给一个小量
   Eigen::Quaterniond q0 = Eigen::Quaterniond (rotation_vector.matrix());
   auto m_q0 = std::make_shared<OrientationMeasurement>(t0, q0, weight_t0);
-  estimator_SO3->AddMeasurement<OrientationMeasurement>(m_q0);
+  estimator_SO3->AddMeasurement<OrientationMeasurement>(m_q0); // 单位四元数初始化SO3估计器
 
   ceres::Solver::Summary summary = estimator_SO3->Solve(30, false);
   std::cout << summary.BriefReport() << std::endl;
@@ -121,6 +121,7 @@ bool TrajectoryManager::evaluateLidarPose(double lidar_time,
   return true;
 }
 
+// LiDAR的相对旋转是由IMU的相对旋转和标定矩阵获得
 bool TrajectoryManager::evaluateLidarRelativeRotation(double lidar_time1,
         double lidar_time2, Eigen::Quaterniond &q_L2toL1) const {
   assert(lidar_time1 <= lidar_time2
@@ -136,7 +137,7 @@ bool TrajectoryManager::evaluateLidarRelativeRotation(double lidar_time1,
   Result result2 = traj_->Evaluate(traj_time2, EvalOrientation);
   Eigen::Quaterniond q_I2toI1 = result1->orientation.conjugate()*result2->orientation;
 
-  q_L2toL1 = calib_param_manager->q_LtoI.conjugate() * q_I2toI1 * calib_param_manager->q_LtoI;
+  q_L2toL1 = calib_param_manager->q_LtoI.conjugate() * q_I2toI1 * calib_param_manager->q_LtoI; // 手眼标定公式
   return true;
 }
 
@@ -150,10 +151,10 @@ void TrajectoryManager::addGyroscopeMeasurements(
   const double max_time = estimator->trajectory()->MaxTime();
 
   for (const auto &v : imu_data_) {
-    if ( min_time > v.timestamp || max_time <= v.timestamp) {
+    if ( min_time > v.timestamp || max_time <= v.timestamp) { // 忽略不在范围内的数据
       continue;
     }
-    auto mg = std::make_shared<GyroMeasurement>(imu_, v.timestamp, v.gyro, weight);
+    auto mg = std::make_shared<GyroMeasurement>(imu_, v.timestamp, v.gyro, weight); //生成gyro观测量
     gyro_list_.push_back(mg);
     estimator->template AddMeasurement<GyroMeasurement>(mg);
   }

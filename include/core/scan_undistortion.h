@@ -43,19 +43,19 @@ public:
     for (const TPointCloud& scan_raw: dataset_reader_->get_scan_data()) {
       Eigen::Quaterniond q_L0_to_G;
       Eigen::Vector3d p_L0_in_G;
-      double scan_timestamp = pcl_conversions::fromPCL(scan_raw.header.stamp).toSec();
-      if (!traj_manager_->evaluateLidarPose(scan_timestamp, q_L0_to_G, p_L0_in_G)) {
+      double scan_timestamp = pcl_conversions::fromPCL(scan_raw.header.stamp).toSec(); // 这一帧的时间戳
+      if (!traj_manager_->evaluateLidarPose(scan_timestamp, q_L0_to_G, p_L0_in_G)) { // traj中获取当前lidar第一个点的位姿，当前帧第0个点的全局位姿
         std::cout << "[ScanUndistortion] : pass " << scan_timestamp << std::endl;
         continue;
       }
 
       VPointCloud::Ptr scan_in_target(new VPointCloud);
       undistort(q_L0_to_G.conjugate(), p_L0_in_G, scan_raw,
-                scan_in_target, correct_position);
-      scan_data_.insert({scan_in_target->header.stamp, scan_in_target});
+                scan_in_target, correct_position); // 纠正scan_raw，保存到scan_in_target，第一帧不纠正平移
+      scan_data_.insert({scan_in_target->header.stamp, scan_in_target}); // 将畸变后的点云加入scan_data_，并
     }
   }
-
+  // 第二次以后去畸变 同时去除旋转和位移畸变
   void undistortScanInMap(bool correct_position = true) {
     scan_data_in_map_.clear();
     map_cloud_ = VPointCloud::Ptr(new VPointCloud);
@@ -72,14 +72,14 @@ public:
       *map_cloud_ += *scan_in_target;
     }
   }
-
+  // 将去除畸变的点云组成一个点云地图  第一次迭代时去畸变，只去除旋转畸变
   void undistortScanInMap(const Eigen::aligned_vector<LiDAROdometry::OdomData>& odom_data) {
     scan_data_in_map_.clear();
     map_cloud_ = VPointCloud::Ptr(new VPointCloud);
 
     for (size_t idx = 0; idx < dataset_reader_->get_scan_data().size(); idx++){
       auto scan_raw = dataset_reader_->get_scan_data().at(idx);
-      auto iter = scan_data_.find(scan_raw.header.stamp);
+      auto iter = scan_data_.find(scan_raw.header.stamp); // 找到第一次去畸变的点云
       if (iter == scan_data_.end()) {
         continue;
       }
@@ -104,13 +104,13 @@ public:
 
 private:
 
-  void undistort(const Eigen::Quaterniond& q_G_to_target,
+  void undistort(const Eigen::Quaterniond& q_G_to_target, // q_G_to_L0 全局到当前帧第0个点的旋转
                  const Eigen::Vector3d& p_target_in_G,
                  const TPointCloud& scan_raw,
                  const VPointCloud::Ptr& scan_in_target,
                  bool correct_position = false) const {
     scan_in_target->header = scan_raw.header;
-    scan_in_target->height = scan_raw.height;
+    scan_in_target->height = scan_raw.height; // 有序点云
     scan_in_target->width  = scan_raw.width;
     scan_in_target->resize(scan_raw.height * scan_raw.width);
     scan_in_target->is_dense = false;
@@ -120,22 +120,22 @@ private:
     for (int h = 0; h < scan_raw.height; h++) {
       for (int w = 0; w < scan_raw.width; w++) {
         VPoint vpoint;
-        if (pcl_isnan(scan_raw.at(w,h).x)) {
+        if (pcl_isnan(scan_raw.at(w,h).x)) { //是否为nan点
           vpoint = NanPoint;
           scan_in_target->at(w,h) = vpoint;
           continue;
         }
-        double point_timestamp = scan_raw.at(w,h).timestamp;
+        double point_timestamp = scan_raw.at(w,h).timestamp; // 当前点的时间戳
         Eigen::Quaterniond q_Lk_to_G;
         Eigen::Vector3d p_Lk_in_G;
-        if (!traj_manager_->evaluateLidarPose(point_timestamp, q_Lk_to_G, p_Lk_in_G)) {
+        if (!traj_manager_->evaluateLidarPose(point_timestamp, q_Lk_to_G, p_Lk_in_G)) { // 当前lidar第k个点的全局位姿（有lidar轨迹获得）
           continue;
         }
-        Eigen::Quaterniond q_LktoL0 = q_G_to_target * q_Lk_to_G;
+        Eigen::Quaterniond q_LktoL0 = q_G_to_target * q_Lk_to_G;  // 第k个点到第0个点的旋转
         Eigen::Vector3d p_Lk(scan_raw.at(w,h).x, scan_raw.at(w,h).y, scan_raw.at(w,h).z);
 
         Eigen::Vector3d point_out;
-        if (!correct_position) {
+        if (!correct_position) { // 不纠正位姿
           point_out = q_LktoL0 * p_Lk;
         } else {
           point_out = q_LktoL0 * p_Lk + q_G_to_target * (p_Lk_in_G - p_target_in_G);
@@ -153,7 +153,7 @@ private:
   TrajectoryManager::Ptr traj_manager_;
   std::shared_ptr<IO::LioDataset> dataset_reader_;
 
-  std::map<pcl::uint64_t, VPointCloud::Ptr> scan_data_;
+  std::map<pcl::uint64_t, VPointCloud::Ptr> scan_data_; // 每次保存畸变去除之后的点云
   std::map<pcl::uint64_t, VPointCloud::Ptr> scan_data_in_map_;
   VPointCloud::Ptr map_cloud_;
 };

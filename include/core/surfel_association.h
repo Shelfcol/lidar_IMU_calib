@@ -41,8 +41,8 @@ public:
   };
 
   struct SurfelPlane {
-    Eigen::Vector4d p4;
-    Eigen::Vector3d Pi; // Closest Point Paramization
+    Eigen::Vector4d p4; // ax+by+cz+d=0，前三维模长为1
+    Eigen::Vector3d Pi; //? Closest Point Paramization
     Eigen::Vector3d boxMin;
     Eigen::Vector3d boxMax;
     VPointCloud cloud;
@@ -117,12 +117,12 @@ private:
 
   boost::circular_buffer<int> color_list_; // for visualization
 
-  double associated_radius_;
+  double associated_radius_; // 0.05m
   double p_lambda_;
   double map_timestamp_;
 
-  Eigen::aligned_vector<SurfelPlane> surfel_planes_;
-  colorPointCloudT surfels_map_;
+  Eigen::aligned_vector<SurfelPlane> surfel_planes_; // 将验证后cell里为平面的加入
+  colorPointCloudT surfels_map_; // 保存每个cell为平面时的内点，且给不同颜色
 
   // associated results
   Eigen::aligned_vector<Eigen::aligned_vector<SurfelPoint>> spoint_per_surfel_;

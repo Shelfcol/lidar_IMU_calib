@@ -46,7 +46,7 @@ void SurfelAssociation::clearSurfelMap() {
   surfels_map_.clear();
   spoints_all_.clear();
 }
-
+// 每个格子拟合平面，并且给不同cell的内点不同颜色
 void SurfelAssociation::setSurfelMap(
         const pclomp::NormalDistributionsTransform<VPoint, VPoint>::Ptr& ndtPtr,
         double timestamp) {
@@ -57,12 +57,12 @@ void SurfelAssociation::setSurfelMap(
 
   // check each cell
   Eigen::Vector3i counter(0,0,0);
-  for (const auto &v : ndtPtr->getTargetCells().getLeaves()) {
+  for (const auto &v : ndtPtr->getTargetCells().getLeaves()) { //leaves报保存的是map<int,leaf> leaf保存当前cell的信息
     auto leaf = v.second;
 
-    if (leaf.nr_points < 10)
+    if (leaf.nr_points < 10) //cell点数要>10
       continue;
-    int plane_type = checkPlaneType(leaf.getEvals(), leaf.getEvecs(), p_lambda_);
+    int plane_type = checkPlaneType(leaf.getEvals(), leaf.getEvecs(), p_lambda_); //cell里的特征值和特征向量判断是否为平面
     if (plane_type < 0)
       continue;
 
@@ -71,7 +71,7 @@ void SurfelAssociation::setSurfelMap(
     if (!fitPlane(leaf.pointList_.makeShared(), surfCoeff, cloud_inliers))
       continue;
 
-    counter(plane_type) += 1;
+    counter(plane_type) += 1; // -1 0 1 2
     SurfelPlane surfplane;
     surfplane.cloud = leaf.pointList_;
     surfplane.cloud_inlier = *cloud_inliers;
@@ -98,9 +98,9 @@ void SurfelAssociation::setSurfelMap(
       colorPointCloudT cloud_rgb;
       pcl::copyPointCloud(v.cloud_inlier, cloud_rgb);
 
-      size_t colorType = (idx++) % color_list_.size();
+      size_t colorType = (idx++) % color_list_.size(); // 点云颜色
       for (auto & p : cloud_rgb) {
-        p.rgba = color_list_[colorType];
+        p.rgba = color_list_[colorType]; // 每个点给不同颜色
       }
       surfels_map_ += cloud_rgb;
     }
@@ -125,7 +125,7 @@ void SurfelAssociation::getAssociation(const VPointCloud::Ptr& scan_inM,
     associateScanToSurfel(plane_id, scan_inM, associated_radius_, ring_masks);
 
     for (int h = 0; h < height; h++) {
-      if (ring_masks.at(h).size() < selected_num_per_ring*2)
+      if (ring_masks.at(h).size() < selected_num_per_ring*2) //当前scan属于这个平面的点太少
         continue;
       int step = ring_masks.at(h).size() / (selected_num_per_ring + 1);
       step = std::max(step, 1);
@@ -193,23 +193,24 @@ int SurfelAssociation::checkPlaneType(const Eigen::Vector3d& eigen_value,
                                       const double& p_lambda) {
   Eigen::Vector3d sorted_vec;
   Eigen::Vector3i ind;
-  Eigen::sort_vec(eigen_value, sorted_vec, ind);
+  Eigen::sort_vec(eigen_value, sorted_vec, ind); //sorted_vec由大到小排排列
 
   double p = 2*(sorted_vec[1] - sorted_vec[2]) /
              (sorted_vec[2] + sorted_vec[1] + sorted_vec[0]);
 
-  if (p < p_lambda) {
+  if (p < p_lambda) { // 小于阈值，不是平面
     return -1;
   }
 
-  int min_idx = ind[2];
-  Eigen::Vector3d plane_normal = eigen_vector.block<3,1>(0, min_idx);
+  int min_idx = ind[2]; // 最小特征值对应列的特征向量为平面的法向量
+  Eigen::Vector3d plane_normal = eigen_vector.block<3,1>(0, min_idx); // 对应列
   plane_normal = plane_normal.array().abs();
 
   Eigen::sort_vec(plane_normal, sorted_vec, ind);
   return ind[2];
 }
 
+// cloud RANSAC拟合平面，平面参数保存到coeffs中，平面内点保存到cloud_inliers中，inlier点数大与20
 bool SurfelAssociation::fitPlane(const VPointCloud::Ptr& cloud,
                                  Eigen::Vector4d &coeffs,
                                  VPointCloud::Ptr cloud_inliers) {
@@ -259,7 +260,7 @@ void SurfelAssociation::associateScanToSurfel(
 
   for (int j = 0 ; j < scan->height; j++) {
     std::vector<int> mask_per_ring;
-    for (int i=0; i< scan->width; i++) {
+    for (int i=0; i< scan->width; i++) { // 每一行，这个点在这个平面的bbox里面，且到平面的距离小于0.05
       if (!pcl_isnan(scan->at(i,j).x) &&
           scan->at(i,j).x > box_min[0] && scan->at(i,j).x < box_max[0] &&
           scan->at(i,j).y > box_min[1] && scan->at(i,j).y < box_max[1] &&
@@ -271,7 +272,7 @@ void SurfelAssociation::associateScanToSurfel(
           }
       }
     } // end of one colmun (ring)
-    ring_masks.push_back(mask_per_ring);
+    ring_masks.push_back(mask_per_ring); // 每一行代表这行属于当前平面的点
   }
 }
 

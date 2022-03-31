@@ -49,7 +49,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 namespace Eigen {
 
 template <typename T>
-using aligned_vector = std::vector<T, Eigen::aligned_allocator<T>>;
+using aligned_vector = std::vector<T, Eigen::aligned_allocator<T>>; // Eigen内存管理方式于c++数据类型不一样，所以这样需要强调Eigen的内存管理方式
 
 template <typename T>
 using aligned_deque = std::deque<T, Eigen::aligned_allocator<T>>;

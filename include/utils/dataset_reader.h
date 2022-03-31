@@ -65,11 +65,11 @@ private:
 
   std::shared_ptr<rosbag::Bag> bag_;
 
-  Eigen::aligned_vector<IMUData> imu_data_;
+  Eigen::aligned_vector<IMUData> imu_data_; //imu原始数据的时间戳，加速度，角速度
 
-  Eigen::aligned_vector<TPointCloud> scan_data_;
-  std::vector<double> scan_timestamps_;
-
+  Eigen::aligned_vector<TPointCloud> scan_data_; // 读取的激光雷达scan
+  std::vector<double> scan_timestamps_; // 读取的激光雷达scan对应的header的时间戳
+  // 标定数据的起止时间
   double start_time_;
   double end_time_;
 
@@ -119,12 +119,12 @@ public:
       rosbag::View view_full;
       view_full.addQuery(*data_->bag_);
       ros::Time time_init = view_full.getBeginTime();
-      time_init += ros::Duration(bag_start);
-      ros::Time time_finish = (bag_durr < 0)?
-                              view_full.getEndTime() : time_init + ros::Duration(bag_durr);
+      time_init += ros::Duration(bag_start); // 起始时间
+      ros::Time time_finish = (bag_durr < 0)?view_full.getEndTime() : time_init + ros::Duration(bag_durr); // 结束时间，不能越界
       view.addQuery(*data_->bag_, rosbag::TopicQuery(topics), time_init, time_finish);
     }
 
+    // 遍历所有的激光雷达话题
     for (rosbag::MessageInstance const m : view) {
       const std::string &topic = m.getTopic();
 
@@ -132,6 +132,7 @@ public:
         TPointCloud pointcloud;
         double timestamp = 0;
 
+        // 两种数据类型
         if (m.getDataType() == std::string("velodyne_msgs/VelodyneScan")) {
           velodyne_msgs::VelodyneScan::ConstPtr vlp_msg =
                   m.instantiate<velodyne_msgs::VelodyneScan>();
@@ -175,28 +176,28 @@ public:
   ///   scan_0  IMU_0    scan_1               scan_N-1  IMU_N    scan_N
   ///
   /// selected data [scan_0, scan_N-1],[IMU_0, IMU_N]
-  /// time  [scan_0.t, scan_N.t)
+  /// time  [scan_0.t, scan_N.t)  IMU时间包含LiDAR
   void adjustDataset() {
-    assert(imu_data.size() > 0 && "No IMU data. Check your bag and imu topic");
-    assert(scan_data.size() > 0 && "No scan data. Check your bag and lidar topic");
-
-    assert(scan_timestamps.front() < imu_data.back().timestamp
-           && scan_timestamps.back() > imu_data.front().timestamp
+    assert(imu_data_.size() > 0 && "No IMU data. Check your bag and imu topic");
+    assert(scan_data_.size() > 0 && "No scan data. Check your bag and lidar topic");
+    // 激光雷达和IMU数据需要有交叉
+    assert(scan_timestamps_.front() < imu_data_.back().timestamp
+           && scan_timestamps_.back() > imu_data_.front().timestamp
            && "Unvalid dataset. Check your dataset.. ");
 
-    if (scan_timestamps_.front() > imu_data_.front().timestamp) {
-      start_time_ = scan_timestamps_.front();
-      while (imu_data_.front().timestamp < start_time_)
+    if (scan_timestamps_.front() > imu_data_.front().timestamp) { // 如果激光雷达第一帧数据时间晚于imu
+      start_time_ = scan_timestamps_.front(); // 将激光雷达的时间戳作为起始时间
+      while (imu_data_.front().timestamp < start_time_) // 将早于起始时间的imu数据删去
         imu_data_.erase(imu_data_.begin());
 
-    } else {
-      while ((*std::next(scan_timestamps_.begin())) < start_time_) {
+    } else { // 激光雷达数据迟于IMU数据
+      while ((*std::next(scan_timestamps_.begin())) < start_time_) { //?
         scan_data_.erase(scan_data_.begin());
         scan_timestamps_.erase(scan_timestamps_.begin());
       }
       start_time_ = scan_timestamps_.front();
     }
-
+    // 终止时间九选scan和imu末尾较小的数据。
     end_time_ = std::min(scan_timestamps_.back(), imu_data_.back().timestamp);
 
     while (imu_data_.back().timestamp > end_time_)

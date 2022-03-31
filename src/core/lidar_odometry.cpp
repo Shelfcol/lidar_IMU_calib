@@ -54,13 +54,14 @@ void LiDAROdometry::feedScan(double timestamp,
   if (map_cloud_->empty()) {
     scan_in_target = cur_scan;
   } else {
-    Eigen::Matrix4d T_LtoM_predict = odom_data_.back().pose * pose_predict;
+    Eigen::Matrix4d T_LtoM_predict = odom_data_.back().pose * pose_predict;  // pose_predict代表dT，使用的不是匀速模型。这里可以改为匀速运动模型
+    
     registration(cur_scan, T_LtoM_predict, odom_cur.pose, scan_in_target);
   }
   odom_data_.push_back(odom_cur);
 
   if (update_map) {
-    updateKeyScan(cur_scan, odom_cur);
+    updateKeyScan(cur_scan, odom_cur); // 将cur_scan转到LidarMap坐标系下，并融入到map_cloud_中
   }
 }
 
@@ -79,7 +80,7 @@ void LiDAROdometry::registration(const VPointCloud::Ptr& cur_scan,
 
 void LiDAROdometry::updateKeyScan(const VPointCloud::Ptr& cur_scan,
                                   const OdomData& odom_data) {
-  if (checkKeyScan(odom_data)) {
+  if (checkKeyScan(odom_data)) { // 是否为关键帧
 
     VPointCloud::Ptr filtered_cloud(new VPointCloud());
     downsampleCloud(cur_scan, filtered_cloud, 0.1);
@@ -87,14 +88,14 @@ void LiDAROdometry::updateKeyScan(const VPointCloud::Ptr& cur_scan,
     VPointCloud::Ptr scan_in_target(new VPointCloud());
     pcl::transformPointCloud(*filtered_cloud, *scan_in_target, odom_data.pose);
 
-    *map_cloud_ += *scan_in_target;
+    *map_cloud_ += *scan_in_target; //  叠加点云
     ndt_omp_->setInputTarget(map_cloud_);
     key_frame_index_.push_back(odom_data_.size());
   }
 }
 
 bool LiDAROdometry::checkKeyScan(const OdomData& odom_data) {
-  static Eigen::Vector3d position_last(0,0,0);
+  static Eigen::Vector3d position_last(0,0,0); // 上一帧的旋转平移
   static Eigen::Vector3d ypr_last(0,0,0);
 
   Eigen::Vector3d position_now = odom_data.pose.block<3,1>(0,3);
@@ -105,8 +106,8 @@ bool LiDAROdometry::checkKeyScan(const OdomData& odom_data) {
   Eigen::Vector3d delta_angle = ypr - ypr_last;
   for (size_t i = 0; i < 3; i++)
     delta_angle(i) = normalize_angle(delta_angle(i));
-  delta_angle = delta_angle.cwiseAbs();
-
+  delta_angle = delta_angle.cwiseAbs(); // 每个元素取绝对值
+  // 第一帧点云，平移量大与0.2，欧拉角每个角度大于5度
   if (key_frame_index_.size() == 0 || dist > 0.2
      || delta_angle(0) > 5.0 || delta_angle(1) > 5.0 || delta_angle(2) > 5.0) {
     position_last = position_now;

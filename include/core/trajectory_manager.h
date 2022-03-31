@@ -136,11 +136,11 @@ private:
 
   CalibParamManager::Ptr calib_param_manager;
 
-  std::vector<IO::IMUData> imu_data_;
+  std::vector<IO::IMUData> imu_data_; // 读取原始的IMU数据
 
   Eigen::aligned_vector<Eigen::Vector3d> closest_point_vec_;
 
-  std::vector< std::shared_ptr<GyroMeasurement>>  gyro_list_;
+  std::vector< std::shared_ptr<GyroMeasurement>>  gyro_list_; // 保存指定时间段内的gyro值
   std::vector< std::shared_ptr<AccelMeasurement>> accel_list_;
   std::vector< std::shared_ptr<SurfMeasurement>>  surfelpoint_list_;
 };

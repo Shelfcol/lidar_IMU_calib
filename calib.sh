@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 
-bag_path="/home/ha/rosbag/li_calib_data"
+bag_path="/home/gxf/multi-sensor-fusion/calib_ws/data"
 
 outdoor_sync_bag_name=(
-#"Court-01.bag"
+"Court-01.bag"
 #"Court-02.bag"
 #"Court-03.bag"
 #"Court-04.bag"
@@ -11,7 +11,7 @@ outdoor_sync_bag_name=(
 )
 
 indoor_sync_bag_name=(
-"Garage-01.bag"
+# "Garage-01.bag"
 #"Garage-02.bag"
 #"Garage-03.bag"
 #"Garage-04.bag"
@@ -29,7 +29,7 @@ bag_durr=30
 scan4map=15
 timeOffsetPadding=0.015
 
-show_ui=true  #false
+show_ui=false  #false
 
 bag_count=-1
 sync_bag_name=(${outdoor_sync_bag_name[*]} ${indoor_sync_bag_name[*]})
