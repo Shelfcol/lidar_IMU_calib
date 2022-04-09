@@ -3,7 +3,7 @@
 bag_path="/home/gxf/multi-sensor-fusion/calib_ws/data"
 
 outdoor_sync_bag_name=(
-"Court-01.bag"
+# "Court-01.bag"
 #"Court-02.bag"
 #"Court-03.bag"
 #"Court-04.bag"
@@ -11,7 +11,7 @@ outdoor_sync_bag_name=(
 )
 
 indoor_sync_bag_name=(
-# "Garage-01.bag"
+"Garage-01.bag"
 #"Garage-02.bag"
 #"Garage-03.bag"
 #"Garage-04.bag"

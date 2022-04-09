@@ -120,18 +120,18 @@ void SurfelAssociation::getAssociation(const VPointCloud::Ptr& scan_inM,
   }
 
 #pragma omp parallel for num_threads(omp_get_max_threads())
-  for (int plane_id = 0; plane_id < surfel_planes_.size(); plane_id++) {
+  for (int plane_id = 0; plane_id < surfel_planes_.size(); plane_id++) { // 遍历多有的候选平面
     std::vector<std::vector<int>> ring_masks;
-    associateScanToSurfel(plane_id, scan_inM, associated_radius_, ring_masks);
+    associateScanToSurfel(plane_id, scan_inM, associated_radius_, ring_masks); // 对map里面的scan在每个平面里面找到里平面最近的激光点，并保存在ring_masks
 
     for (int h = 0; h < height; h++) {
-      if (ring_masks.at(h).size() < selected_num_per_ring*2) //当前scan属于这个平面的点太少
+      if (ring_masks.at(h).size() < selected_num_per_ring*2) //当前scanID上属于这个平面的点太少，不加入
         continue;
       int step = ring_masks.at(h).size() / (selected_num_per_ring + 1);
-      step = std::max(step, 1);
+      step = std::max(step, 1); //?
       for (int selected = 0; selected < selected_num_per_ring; selected++) {
         int w = ring_masks.at(h).at(step * (selected+1) - 1);
-        associatedFlag[h*width + w] = plane_id;
+        associatedFlag[h*width + w] = plane_id; // 而为对应到一维
       }
     }
   }
@@ -152,7 +152,7 @@ void SurfelAssociation::getAssociation(const VPointCloud::Ptr& scan_inM,
       spoint.plane_id = associatedFlag[h*width+w];
       spoint.timestamp = scan_raw->at(w,h).timestamp;
 
-      spoint_per_surfel_.at(spoint.plane_id).push_back(spoint);
+      spoint_per_surfel_.at(spoint.plane_id).push_back(spoint); // 每个平面对应的点云
       spoints_all_.push_back(spoint);
     }
   }

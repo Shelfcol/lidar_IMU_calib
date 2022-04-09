@@ -121,7 +121,7 @@ private:
   double p_lambda_;
   double map_timestamp_;
 
-  Eigen::aligned_vector<SurfelPlane> surfel_planes_; // 将验证后cell里为平面的加入
+  Eigen::aligned_vector<SurfelPlane> surfel_planes_; // 将验证后cell里验证为平面的加入
   colorPointCloudT surfels_map_; // 保存每个cell为平面时的内点，且给不同颜色
 
   // associated results

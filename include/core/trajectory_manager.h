@@ -134,7 +134,7 @@ private:
   std::shared_ptr<kontiki::sensors::ConstantBiasImu> imu_;
   std::shared_ptr<kontiki::sensors::VLP16LiDAR> lidar_;
 
-  CalibParamManager::Ptr calib_param_manager;
+  CalibParamManager::Ptr calib_param_manager; // 标定参数管理代码
 
   std::vector<IO::IMUData> imu_data_; // 读取原始的IMU数据
 

@@ -22,3 +22,5 @@ cmake-build-*/
 build-*/
 thirdparty/build-*/
 thirdparty/build-*
+
+.vscode/
