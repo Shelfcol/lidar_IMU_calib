@@ -42,6 +42,7 @@ LiDAROdometry::ndtInit(double ndt_resolution) {
   return ndt_omp;
 }
 
+// 输入新的点云，做NDT批评匹配
 void LiDAROdometry::feedScan(double timestamp,
                              VPointCloud::Ptr cur_scan,
                              Eigen::Matrix4d pose_predict,

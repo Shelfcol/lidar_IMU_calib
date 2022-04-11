@@ -42,11 +42,14 @@ void TrajectoryManager::feedIMUData(const IO::IMUData& data) {
 void TrajectoryManager::initialSO3TrajWithGyro() {
   assert(imu_data_.size() > 0 &&
          "[initialSO3TrajWithGyro]: There's NO imu data for initialization.");
+  // 1. 定义一个SO3的估计器
   std::shared_ptr<SO3TrajEstimator> estimator_SO3;
   estimator_SO3 = std::make_shared<SO3TrajEstimator>(traj_->SO3Spline());
-  // 将gyro数据加入estimator_SO3
-  addGyroscopeMeasurements(estimator_SO3);
 
+  // 2. 将gyro数据加入estimator_SO3
+  addGyroscopeMeasurements(estimator_SO3);
+  
+  // 3. 固定初始位置
   /// fix the initial pose of trajectory
   double weight_t0 = calib_param_manager->global_opt_gyro_weight;
   double t0 = traj_->SO3Spline()->MinTime();
@@ -56,31 +59,33 @@ void TrajectoryManager::initialSO3TrajWithGyro() {
   auto m_q0 = std::make_shared<OrientationMeasurement>(t0, q0, weight_t0);
   estimator_SO3->AddMeasurement<OrientationMeasurement>(m_q0); // 单位四元数初始化SO3估计器
 
+  // 4. ceres求解
   ceres::Solver::Summary summary = estimator_SO3->Solve(30, false);
   std::cout << summary.BriefReport() << std::endl;
 }
 
+// 从平面中恢复轨迹
 void TrajectoryManager::trajInitFromSurfel(
         SurfelAssociation::Ptr surfels_association,
         bool opt_time_offset_) {
-  lidar_->set_relative_orientation(calib_param_manager->q_LtoI);
+  lidar_->set_relative_orientation(calib_param_manager->q_LtoI); 
   lidar_->set_relative_position(calib_param_manager->p_LinI);
   lidar_->LockRelativeOrientation(false);
   lidar_->LockRelativePosition(false);
   if (opt_time_offset_ && time_offset_padding_ > 0) {
-    lidar_->LockTimeOffset(false);
+    lidar_->LockTimeOffset(false); // 不锁住时间偏差
     lidar_->set_max_time_offset(time_offset_padding_);
   }
   else {
     lidar_->LockTimeOffset(true);
   }
-  imu_->LockGyroscopeBias(false);
+  imu_->LockGyroscopeBias(false); // 不锁住imu的bias
   imu_->LockAccelerometerBias(false);
 
   std::shared_ptr<SplitTrajEstimator> estimator_split;
   estimator_split = std::make_shared<SplitTrajEstimator>(traj_);
 
-  // add constraints
+  // add constraints IMU的陀螺仪，加速度计，平面观测量
   addGyroscopeMeasurements(estimator_split);
   addAccelerometerMeasurement(estimator_split);
   addSurfMeasurement(estimator_split, surfels_association);
@@ -101,6 +106,7 @@ void TrajectoryManager::trajInitFromSurfel(
   calib_param_manager->showStates();
 }
 
+// 直接为获取的轨迹
 bool TrajectoryManager::evaluateIMUPose(double imu_time, int flags,
                                         Result &result) const {
   if (traj_->MinTime() > imu_time || traj_->MaxTime() <= imu_time)
@@ -109,6 +115,7 @@ bool TrajectoryManager::evaluateIMUPose(double imu_time, int flags,
   return true;
 }
 
+// LiDAR位姿为对应时刻的轨迹位姿（IMU）与两者之间的转换矩阵的转换
 bool TrajectoryManager::evaluateLidarPose(double lidar_time,
                                           Eigen::Quaterniond &q_LtoG,
                                           Eigen::Vector3d &p_LinG) const {
@@ -121,7 +128,7 @@ bool TrajectoryManager::evaluateLidarPose(double lidar_time,
   return true;
 }
 
-// LiDAR的相对旋转是由IMU的相对旋转和标定矩阵获得
+// 两个时刻LiDAR的相对位姿获取，LiDAR的相对旋转是由IMU的相对旋转和标定矩阵获得
 bool TrajectoryManager::evaluateLidarRelativeRotation(double lidar_time1,
         double lidar_time2, Eigen::Quaterniond &q_L2toL1) const {
   assert(lidar_time1 <= lidar_time2
@@ -135,7 +142,7 @@ bool TrajectoryManager::evaluateLidarRelativeRotation(double lidar_time1,
 
   Result result1 = traj_->Evaluate(traj_time1, EvalOrientation);
   Result result2 = traj_->Evaluate(traj_time2, EvalOrientation);
-  Eigen::Quaterniond q_I2toI1 = result1->orientation.conjugate()*result2->orientation;
+  Eigen::Quaterniond q_I2toI1 = result1->orientation.conjugate()*result2->orientation; // 左乘：result1*q_I2toI1 = result2
 
   q_L2toL1 = calib_param_manager->q_LtoI.conjugate() * q_I2toI1 * calib_param_manager->q_LtoI; // 手眼标定公式
   return true;
@@ -156,7 +163,7 @@ void TrajectoryManager::addGyroscopeMeasurements(
     }
     auto mg = std::make_shared<GyroMeasurement>(imu_, v.timestamp, v.gyro, weight); //生成gyro观测量
     gyro_list_.push_back(mg);
-    estimator->template AddMeasurement<GyroMeasurement>(mg);
+    estimator->template AddMeasurement<GyroMeasurement>(mg); // 模板的模板内需要template
   }
 }
 
@@ -179,6 +186,7 @@ void TrajectoryManager::addAccelerometerMeasurement(
   }
 }
 
+
 template <typename TrajectoryModel>
 void TrajectoryManager::addSurfMeasurement(
         std::shared_ptr<kontiki::TrajectoryEstimator<TrajectoryModel>> estimator,
@@ -187,7 +195,7 @@ void TrajectoryManager::addSurfMeasurement(
   surfelpoint_list_.clear();
   closest_point_vec_.clear();
   for (auto const& v: surfel_association->get_surfel_planes()) {
-    closest_point_vec_.push_back(v.Pi);
+    closest_point_vec_.push_back(v.Pi); // 每个平面的最近点，这个点代表的就是这个平面
   }
 
   map_time_ = surfel_association->get_maptime();
@@ -195,8 +203,8 @@ void TrajectoryManager::addSurfMeasurement(
     double time = spoint.timestamp;
     size_t plane_id = spoint.plane_id;
 
-    auto msp = std::make_shared<SurfMeasurement> (lidar_, spoint.point,
-                                                  closest_point_vec_.at(plane_id).data(), time, map_time_, 5.0, weight);
+    auto msp = std::make_shared<SurfMeasurement> (lidar_, spoint.point, // 平面对应上的点，对应平面，当前点的时间，地图时间，核函数参数，权重
+                                                  closest_point_vec_.at(plane_id).data(), time, map_time_, 5.0, weight); //5.0是Huber核的参数
     surfelpoint_list_.push_back(msp);
     estimator->template AddMeasurement<SurfMeasurement>(msp);
   }

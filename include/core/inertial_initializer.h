@@ -48,13 +48,13 @@ public:
   }
 
   Eigen::Quaterniond getQ_ItoS() {
-    return q_ItoS_est_;
+    return q_ItoS_est_; // IMU2LiDAR
   }
 
 
 private:
   bool rotaion_initialized_;
-  Eigen::Quaterniond q_ItoS_est_;
+  Eigen::Quaterniond q_ItoS_est_; // IMU2LiDAR
 
 };
 

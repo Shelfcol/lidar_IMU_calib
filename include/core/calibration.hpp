@@ -122,9 +122,9 @@ public:
   }
 
 public:
-  Eigen::Vector3d p_LinI;
+  Eigen::Vector3d p_LinI; // LiDAR in IMU
 
-  Eigen::Quaterniond q_LtoI;
+  Eigen::Quaterniond q_LtoI; // Lidar2IMU
 
   Eigen::Vector3d gravity;
 

@@ -36,13 +36,13 @@ public:
   struct SurfelPoint {
     double timestamp;
     Eigen::Vector3d point;  // raw data
-    Eigen::Vector3d point_in_map;
-    size_t plane_id;
+    Eigen::Vector3d point_in_map; // raw data在构建的地图中的对应点
+    size_t plane_id; // point_in_map在plane_id的bbox中，且点面距离小于阈值
   };
 
   struct SurfelPlane {
     Eigen::Vector4d p4; // ax+by+cz+d=0，前三维模长为1
-    Eigen::Vector3d Pi; //? Closest Point Paramization
+    Eigen::Vector3d Pi; //? Closest Point Paramization   -surfCoeff(3) * surfCoeff.head<3>();
     Eigen::Vector3d boxMin;
     Eigen::Vector3d boxMax;
     VPointCloud cloud;
@@ -118,15 +118,15 @@ private:
   boost::circular_buffer<int> color_list_; // for visualization
 
   double associated_radius_; // 0.05m
-  double p_lambda_;
+  double p_lambda_; // 判断每个cell是否为平面的阈值参数 第一帧为0.6，0.7
   double map_timestamp_;
 
   Eigen::aligned_vector<SurfelPlane> surfel_planes_; // 将验证后cell里验证为平面的加入
   colorPointCloudT surfels_map_; // 保存每个cell为平面时的内点，且给不同颜色
 
   // associated results
-  Eigen::aligned_vector<Eigen::aligned_vector<SurfelPoint>> spoint_per_surfel_;
-  Eigen::aligned_vector<SurfelPoint> spoints_all_;
+  Eigen::aligned_vector<Eigen::aligned_vector<SurfelPoint>> spoint_per_surfel_; // 二维向量，列号对应的平面ID，行号为当前平面bbox中的地图点
+  Eigen::aligned_vector<SurfelPoint> spoints_all_; // 单纯属于所有平面的点
 
   Eigen::aligned_vector<SurfelPoint> spoint_downsampled_;
 };

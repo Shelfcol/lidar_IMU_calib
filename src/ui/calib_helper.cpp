@@ -77,6 +77,7 @@ CalibrHelper::CalibrHelper(ros::NodeHandle& nh)
   scan4map_time_ = map_time_ + scan4map;
   double end_time = dataset_reader_->get_end_time();
 
+  // 用lidar的起始和终止时间之间构建轨迹
   traj_manager_ = std::make_shared<TrajectoryManager>(
           map_time_, end_time, knot_distance, time_offset_padding);
 
@@ -152,7 +153,8 @@ void CalibrHelper::Initialization() {
   if (calib_step_ != InitializationDone)
     ROS_WARN("[Initialization] fails.");
 }
-
+// 平面的获取是由地图得到的，所以所有帧只会得到一组平面，那么我们用地图中的点找到对应平面肯定是可以的
+// 使用每帧地图得到的平面，然后找到每帧地图在当前帧中属于某个平面（在plane的bbox中，且点面距离小于阈值），将对应的原始点云和地图中点云和平面关联起来
 void CalibrHelper::DataAssociation() {
   std::cout << "[Association] start ...." << std::endl;
   TicToc timer;
@@ -171,25 +173,26 @@ void CalibrHelper::DataAssociation() {
     plane_lambda_ = 0.7;
     surfel_association_->setPlaneLambda(plane_lambda_);
     auto ndt_omp = LiDAROdometry::ndtInit(ndt_resolution_);
-    ndt_omp->setInputTarget(scan_undistortion_->get_map_cloud());
-    surfel_association_->setSurfelMap(ndt_omp, map_time_);
+    ndt_omp->setInputTarget(scan_undistortion_->get_map_cloud()); // 将点云输入ndt_omp，借助ndt_omp来计算每个cell的性质
+    surfel_association_->setSurfelMap(ndt_omp, map_time_); // ndt_omp计算每个cell的特征值特征向量，然后拟合平面，得到每个平面的inliner
   } else {
       ROS_WARN("[DataAssociation] Please follow the step.");
       return;
   }
 
-  /// get association
+  // 关联时，遍历每帧点云，只去找对应的地图中的点云，然后与所有的小格子里的平面进行关联
+  // get association
   for (auto const &scan_raw : dataset_reader_->get_scan_data()) {
     auto iter = scan_undistortion_->get_scan_data_in_map().find(
-            scan_raw.header.stamp);
+            scan_raw.header.stamp); // 给scan_raw找到对应时刻在map中去了畸变的点云
     if (iter == scan_undistortion_->get_scan_data_in_map().end()) {
       continue;
     }
-    surfel_association_->getAssociation(iter->second, scan_raw.makeShared(), 2);
+    surfel_association_->getAssociation(iter->second, scan_raw.makeShared(), 2); // 使用scan_inM找到属于所有平面的点，条件是点在平面的bbox中，且点面距离小于一定阈值，并且将对应的原始点云中的点加入进来
   }
   surfel_association_->averageTimeDownSmaple();
   std::cout << "Surfel point number: "
-            << surfel_association_->get_surfel_points().size() << std::endl;
+            << surfel_association_->get_surfel_points().size() << std::endl; // 降采样后的点
   std::cout<<GREEN<<"[Association] "<<timer.toc()<<" ms"<<RESET<<std::endl;
 
   if (surfel_association_->get_surfel_points().size() > 10){
@@ -199,6 +202,7 @@ void CalibrHelper::DataAssociation() {
   }
 }
 
+// 批量优化
 void CalibrHelper::BatchOptimization() {
   if (DataAssociationDone != calib_step_) {
     ROS_WARN("[BatchOptimization] Need status: DataAssociationDone.");
@@ -223,7 +227,7 @@ void CalibrHelper::Refinement() {
   iteration_step_++;
   std::cout << "\n================ Iteration " << iteration_step_ << " ==================\n";
 
-  DataAssociation();
+  DataAssociation(); // 数据关联
   if (DataAssociationDone != calib_step_) {
     ROS_WARN("[Refinement] Need status: DataAssociationDone.");
     return;
@@ -257,10 +261,10 @@ void CalibrHelper::Mapping(bool relocalization) {
     auto iter = scan_undistortion_->get_scan_data().find(scan_raw.header.stamp); // 找出当前帧对应的去畸变后的激光雷达数据
     if (iter != scan_undistortion_->get_scan_data().end()) {
       Eigen::Matrix4d pose_predict = Eigen::Matrix4d::Identity();
-      Eigen::Quaterniond q_L2toL1 = Eigen::Quaterniond::Identity();
+      Eigen::Quaterniond q_L2toL1 = Eigen::Quaterniond::Identity(); // 两帧之间的相对运动
       if (last_scan_t > 0 &&
         traj_manager_->evaluateLidarRelativeRotation(last_scan_t, scan_t, q_L2toL1)) {//由IMU相对旋转和标定外参，获取两个时刻LiDAR的相对旋转
-        pose_predict.block<3,3>(0,0) = q_L2toL1.toRotationMatrix(); // 第一帧为单位矩阵
+        pose_predict.block<3,3>(0,0) = q_L2toL1.toRotationMatrix(); // 第一帧为单位矩阵，后面就使用拟合的IMU轨迹得到激光雷达的位姿
       }
       lidar_odom_->feedScan(scan_t, iter->second, pose_predict, update_map); // 利用去畸变的点云估计里程计
       last_scan_t = scan_t;

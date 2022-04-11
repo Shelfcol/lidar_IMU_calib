@@ -49,8 +49,8 @@ class TrajectoryManager {
   using R3TrajEstimator    = kontiki::TrajectoryEstimator<kontiki::trajectories::UniformR3SplineTrajectory>;
   using SplitTrajEstimator = kontiki::TrajectoryEstimator<kontiki::trajectories::SplitTrajectory>;
 
-  using GyroMeasurement    = kontiki::measurements::GyroscopeMeasurement<IMUSensor>;
-  using AccelMeasurement   = kontiki::measurements::AccelerometerMeasurement<IMUSensor>;
+  using GyroMeasurement    = kontiki::measurements::GyroscopeMeasurement<IMUSensor>; // IMU的角速度观测
+  using AccelMeasurement   = kontiki::measurements::AccelerometerMeasurement<IMUSensor>; // IMU加速度观测
   using SurfMeasurement         = kontiki::measurements::LiDARSurfelPoint<LiDARSensor>;
 
   using OrientationMeasurement  = kontiki::measurements::OrientationMeasurement;
